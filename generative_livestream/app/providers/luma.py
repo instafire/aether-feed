@@ -42,7 +42,7 @@ class LumaProvider(VideoProvider):
         payload: dict = {
             "prompt": req.prompt,
             "model": settings.luma_model,
-            "aspect_ratio": "16:9",
+            "aspect_ratio": settings.aspect_ratio,
             "resolution": "720p",
             "duration": "9s" if req.duration_sec > 6 else "5s",
             "loop": bool(req.loop),

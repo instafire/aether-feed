@@ -66,6 +66,7 @@ class KlingProvider(VideoProvider):
                 "image": b64,
                 "prompt": req.prompt[:2500],
                 "mode": "std",
+                "aspect_ratio": settings.aspect_ratio,
                 "duration": "10" if req.duration_sec > 7 else "5",
                 "cfg_scale": 0.5,
             }

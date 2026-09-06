@@ -7,6 +7,7 @@ loop per state, and frame-continuous transition clips between every pair
 state's anchor frame, so the target loop chains with no visible seam.
 
     python3 scripts/build_demo.py ../livestream_player/demo
+    STREAM_FORMAT=portrait STREAM_SIZE=540 python3 scripts/build_demo.py ../livestream_player/demo_portrait
 """
 
 from __future__ import annotations
@@ -21,8 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 import os  # noqa: E402
 
-os.environ.setdefault("VIDEO_WIDTH", "960")
-os.environ.setdefault("VIDEO_HEIGHT", "540")
+os.environ.setdefault("STREAM_SIZE", "540")
 os.environ.setdefault("VIDEO_CRF", "25")
 os.environ.setdefault("SEGMENT_SEC", "6")
 os.environ.setdefault("LOOP_SEC", "6")
@@ -70,7 +70,7 @@ async def main(out_dir: Path) -> None:
         beat = await media.mock_image_to_video(anchors["golden"], work / f"seed_{state}.mp4", LOOKS["golden"], LOOKS[state], duration=DUR, drift=(0.012, -0.006))
         anchors[state] = await media.last_frame(beat, work / f"anchor_{state}.jpg")
 
-    manifest: dict = {"fps": settings.fps, "width": settings.width, "height": settings.height,
+    manifest: dict = {"fps": settings.fps, "width": settings.width, "height": settings.height, "format": settings.format,
                       "duration_sec": DUR, "states": {}, "transitions": {}, "codec": settings.mime}
 
     for state in STATES:

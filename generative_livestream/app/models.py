@@ -83,8 +83,10 @@ class LoopEntry(BaseModel):
 
 class GenerationJob(BaseModel):
     job_id: str
-    trigger: Literal["user_prompt", "loop", "library"]
+    trigger: Literal["user_prompt", "chat_vote", "gift", "loop", "library"]
     user_prompt_raw: str
+    requested_by: str = "director"
+    meta: dict[str, Any] = Field(default_factory=dict)
     director_prompt_final: str = ""
     condition_frame: str | None = None
     priority: Literal["interrupt", "queue"] = "queue"
@@ -108,6 +110,21 @@ class DirectorResult(BaseModel):
 class PromptRequest(BaseModel):
     prompt: str
     provider: str | None = None
+
+
+class FormatRequest(BaseModel):
+    format: str
+    size: str | None = None
+
+
+class AudienceEventIn(BaseModel):
+    platform: str = "webhook"
+    type: Literal["chat", "gift", "like", "follow", "share", "join"]
+    user: str = "viewer"
+    text: str = ""
+    gift_name: str = ""
+    gift_value: int = 0
+    count: int = 1
 
 
 class Metrics(BaseModel):
@@ -137,3 +154,6 @@ class EngineSnapshot(BaseModel):
     providers: dict[str, Any]
     primary_provider: str
     events: list[str]
+    session: int = 1
+    format: dict[str, Any] = Field(default_factory=dict)
+    audience: dict[str, Any] = Field(default_factory=dict)

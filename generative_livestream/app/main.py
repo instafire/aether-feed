@@ -11,7 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
 from .config import settings
-from .models import PromptRequest
+from .audience import AudienceEvent
+from .config import FORMATS, SIZES
+from .models import AudienceEventIn, FormatRequest, PromptRequest
 from .timeline import timeline
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -43,6 +45,8 @@ async def health():
         "state": timeline.state().value,
         "buffer_ahead_sec": round(timeline.buffer_ahead(), 2),
         "primary_provider": timeline.primary,
+        "session": timeline.session,
+        "format": settings.format_info(),
     }
 
 
@@ -63,11 +67,13 @@ async def playlist(after: int = 0, limit: int = 40):
     segs = timeline.playlist(after_seq=after, limit=limit)
     live = timeline.live_segment()
     return {
+        "session": timeline.session,
         "live_offset_sec": round(timeline.live_offset(), 3),
         "live_seq": live.seq if live else 0,
         "end_offset_sec": round(timeline.end_offset, 3),
         "segments": [s.model_dump(mode="json") for s in segs],
         "codec": settings.mime,
+        "format": settings.format_info(),
     }
 
 
@@ -78,6 +84,45 @@ async def prompt(body: PromptRequest, request: Request):
     if not result["ok"]:
         raise HTTPException(status_code=400, detail=result["reason"])
     return result | {"state": _snapshot_payload()}
+
+
+@app.get("/api/format")
+async def get_format():
+    return settings.format_info() | {"session": timeline.session}
+
+
+@app.post("/api/format")
+async def set_format(body: FormatRequest):
+    """Switch aspect ratio / size. Starts a new session; the player re-attaches."""
+    if body.format not in FORMATS:
+        raise HTTPException(400, "unknown format")
+    if body.size is not None and body.size not in SIZES:
+        raise HTTPException(400, "unknown size")
+    if body.format == settings.format and (body.size is None or body.size == settings.size):
+        return settings.format_info() | {"session": timeline.session, "changed": False}
+    asyncio.create_task(timeline.restart(body.format, body.size))
+    return settings.format_info() | {"session": timeline.session + 1, "changed": True}
+
+
+@app.get("/api/audience")
+async def audience_state():
+    return timeline.audience.snapshot()
+
+
+@app.post("/api/audience/event")
+async def audience_event(body: AudienceEventIn):
+    """Generic webhook for any platform relay (TikTok, Twitch, YouTube, Kick, ...)."""
+    timeline.ingest_audience(AudienceEvent(
+        platform=body.platform, type=body.type, user=body.user[:40], text=body.text[:280],
+        gift_name=body.gift_name[:40], gift_value=max(0, body.gift_value), count=max(1, body.count),
+    ))
+    return {"ok": True, "audience": timeline.audience.snapshot()}
+
+
+@app.post("/api/audience/simulate/{state}")
+async def audience_simulate(state: str):
+    timeline.set_simulator(state in ("on", "1", "true", "start"))
+    return {"ok": True, "simulating": timeline.simulate_audience}
 
 
 @app.post("/api/fail-next")

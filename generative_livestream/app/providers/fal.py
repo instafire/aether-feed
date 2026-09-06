@@ -35,7 +35,7 @@ class FalProvider(VideoProvider):
             "prompt": req.prompt[:1500],
             "image_url": frame_data_uri(req.condition_frame),
             "duration": "10" if req.duration_sec > 7 else "5",
-            "aspect_ratio": "16:9",
+            "aspect_ratio": settings.aspect_ratio,
         }
         result = await asyncio.to_thread(fal_client.subscribe, settings.fal_model, arguments=args)
         video = (result or {}).get("video") or {}

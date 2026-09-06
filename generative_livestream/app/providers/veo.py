@@ -41,7 +41,7 @@ class VeoProvider(VideoProvider):
             raise ProviderError("GEMINI_API_KEY not set")
         b64, mime = frame_b64(req.condition_frame)
         instance: dict = {"prompt": req.prompt}
-        params: dict = {"aspectRatio": "16:9", "resolution": "720p", "numberOfVideos": 1}
+        params: dict = {"aspectRatio": "9:16" if settings.format == "portrait" else "16:9", "resolution": "720p", "numberOfVideos": 1}
         native_extend = False
         overlap = 0.0
 

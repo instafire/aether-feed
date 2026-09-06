@@ -16,7 +16,12 @@ prompt that will be sent to a text-to-video model for the next segment.
 You will receive:
 - WORLD_STATE: established style, setting, characters, current situation.
 - LAST_FRAME_DESCRIPTION: a description of the final frame now playing.
-- USER_PROMPT: what the user just typed.
+- USER_PROMPT: what the user just typed (or what the live audience voted
+  for / a gift spectacle to acknowledge).
+- AUDIENCE: energy (calm/medium/high), chat rate, trending words, top
+  gifter. Match the energy: calm → slow drifting camera and gentle motion;
+  high → livelier motion, more happening in frame, but never a hard cut.
+  Never render text or usernames in the video.
 
 Your job:
 1. Write one vivid, cinematic prompt (under ~120 words) for the next
@@ -53,7 +58,7 @@ def infer_look(text: str, current: str) -> str:
     return current
 
 
-def compose_local(world: WorldState, user_prompt: str, *, loop: bool = False) -> DirectorResult:
+def compose_local(world: WorldState, user_prompt: str, *, loop: bool = False, audience: dict | None = None) -> DirectorResult:
     safety = moderate(user_prompt)
     substituted = False
     intent = user_prompt.strip()
@@ -77,10 +82,12 @@ def compose_local(world: WorldState, user_prompt: str, *, loop: bool = False) ->
             f"Keep the {world.look} light. No new events, no people entering. 8 seconds."
         )
     else:
+        energy = (audience or {}).get("energy", "calm")
+        pace = {"calm": "slow, drifting motion", "medium": "gentle but lively motion", "high": "lively, energetic motion with more happening in frame"}.get(energy, "slow, drifting motion")
         generation_prompt = (
             f"{world.style_prefix}. {world.setting}. Characters: {chars}. "
             f"Last frame: {world.last_frame_description}. {continuity}{intent}. "
-            f"{world.current_camera_state}. Keep the {world.tone} tone. Photoreal, 8 seconds."
+            f"{world.current_camera_state}, {pace}. Keep the {world.tone} tone. No text or letters anywhere. Photoreal, 8 seconds."
         )
     generation_prompt = generation_prompt[:1000]
 
@@ -105,17 +112,18 @@ def compose_local(world: WorldState, user_prompt: str, *, loop: bool = False) ->
     )
 
 
-def _payload(world: WorldState, user_prompt: str) -> str:
+def _payload(world: WorldState, user_prompt: str, audience: dict | None = None) -> str:
     return json.dumps(
         {
             "WORLD_STATE": world.model_dump(mode="json"),
             "LAST_FRAME_DESCRIPTION": world.last_frame_description,
             "USER_PROMPT": user_prompt,
+            "AUDIENCE": audience or {"energy": "calm"},
         }
     )
 
 
-async def _openai(world: WorldState, user_prompt: str) -> dict:
+async def _openai(world: WorldState, user_prompt: str, audience: dict | None = None) -> dict:
     async with httpx.AsyncClient(timeout=25) as client:
         r = await client.post(
             "https://api.openai.com/v1/chat/completions",
@@ -125,7 +133,7 @@ async def _openai(world: WorldState, user_prompt: str) -> dict:
                 "response_format": {"type": "json_object"},
                 "messages": [
                     {"role": "system", "content": DIRECTOR_SYSTEM},
-                    {"role": "user", "content": _payload(world, user_prompt)},
+                    {"role": "user", "content": _payload(world, user_prompt, audience)},
                 ],
             },
         )
@@ -133,7 +141,7 @@ async def _openai(world: WorldState, user_prompt: str) -> dict:
         return json.loads(r.json()["choices"][0]["message"]["content"])
 
 
-async def _gemini(world: WorldState, user_prompt: str) -> dict:
+async def _gemini(world: WorldState, user_prompt: str, audience: dict | None = None) -> dict:
     model = settings.director_model if settings.director_model.startswith("gemini") else "gemini-2.5-flash"
     async with httpx.AsyncClient(timeout=25) as client:
         r = await client.post(
@@ -141,7 +149,7 @@ async def _gemini(world: WorldState, user_prompt: str) -> dict:
             headers={"x-goog-api-key": settings.gemini_api_key},
             json={
                 "systemInstruction": {"parts": [{"text": DIRECTOR_SYSTEM}]},
-                "contents": [{"role": "user", "parts": [{"text": _payload(world, user_prompt)}]}],
+                "contents": [{"role": "user", "parts": [{"text": _payload(world, user_prompt, audience)}]}],
                 "generationConfig": {"responseMimeType": "application/json"},
             },
         )
@@ -150,7 +158,7 @@ async def _gemini(world: WorldState, user_prompt: str) -> dict:
         return json.loads(text)
 
 
-async def compose(world: WorldState, user_prompt: str, *, loop: bool = False) -> DirectorResult:
+async def compose(world: WorldState, user_prompt: str, *, loop: bool = False, audience: dict | None = None) -> DirectorResult:
     """LLM director when a key is present; deterministic director otherwise.
 
     Loop prompts always use the local director — they are formulaic and the
@@ -162,12 +170,12 @@ async def compose(world: WorldState, user_prompt: str, *, loop: bool = False) ->
     if backend == "auto":
         backend = "openai" if settings.openai_api_key else ("gemini" if settings.gemini_api_key else "local")
     if backend == "local":
-        return compose_local(world, user_prompt)
+        return compose_local(world, user_prompt, audience=audience)
     safety = moderate(user_prompt)
     if not safety.ok:
-        return compose_local(world, user_prompt)
+        return compose_local(world, user_prompt, audience=audience)
     try:
-        raw = await (_openai if backend == "openai" else _gemini)(world, user_prompt)
+        raw = await (_openai if backend == "openai" else _gemini)(world, user_prompt, audience)
         updated = WorldState.model_validate({**world.model_dump(mode="json"), **raw["updated_world_state"]})
         if updated.look not in ("golden", "night", "storm", "dawn"):
             updated.look = infer_look(user_prompt, world.look)
@@ -179,4 +187,4 @@ async def compose(world: WorldState, user_prompt: str, *, loop: bool = False) ->
             look=updated.look,
         )
     except Exception:
-        return compose_local(world, user_prompt)
+        return compose_local(world, user_prompt, audience=audience)

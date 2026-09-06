@@ -18,44 +18,123 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="min-h-dvh text-sm antialiased bg-black text-stone-200">
-  <div id="app" class="relative min-h-dvh w-full overflow-hidden">
+  <div id="app" class="relative min-h-dvh w-full overflow-hidden" data-format="landscape">
     <div class="stage" id="stage" aria-label="Live generative feed">
-      <div class="feed-wrap" id="feedWrap">
-        <video id="feed" muted autoplay playsinline preload="auto" poster="assets/idle_market.jpg"></video>
+      <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+      <div class="frame" id="frame">
+        <div class="feed-wrap" id="feedWrap">
+          <video id="feed" muted autoplay playsinline preload="auto" poster="assets/idle_market.jpg"></video>
+        </div>
+        <div class="grain" aria-hidden="true"></div>
+        <div class="vignette" aria-hidden="true"></div>
+
+        <header class="chrome top-chrome">
+          <div class="live-pill">
+            <span class="live-dot" id="liveDot"></span>
+            <span class="tracking-[0.22em] text-[10px] font-medium uppercase" id="liveLabel">Live</span>
+          </div>
+          <div class="status-line">
+            <span id="stateLabel">CONNECTING</span>
+            <span class="sep">·</span>
+            <span id="nowPlaying">—</span>
+          </div>
+          <div class="hype" id="hypeWrap" title="Audience energy">
+            <span class="hype-label" id="energyLabel">calm</span>
+            <div class="hype-track"><div class="hype-fill" id="hypeFill"></div></div>
+          </div>
+          <div class="buffer-meter" title="Ready-ahead buffer">
+            <span class="buffer-label">buf</span>
+            <div class="buffer-track"><div class="buffer-fill" id="bufferFill"></div></div>
+            <span id="bufferLabel" class="tabular">0.0s</span>
+          </div>
+        </header>
+
+        <div class="compose-indicator" id="composeIndicator" hidden>
+          <span class="compose-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span id="composeText">composing next beat</span>
+        </div>
+
+        <div class="vote-card" id="voteCard" hidden>
+          <div class="vote-title">chat is directing</div>
+          <div class="vote-prompt" id="votePrompt">—</div>
+          <div class="vote-meta"><span id="voteCount">0 votes</span><span class="sep">·</span><span id="voteTimer">20s</span></div>
+        </div>
+
+        <div class="gift-layer" id="giftLayer" aria-live="polite"></div>
+
+        <div class="chat-overlay" id="chatOverlay" aria-label="Live chat">
+          <ul id="chatList"></ul>
+        </div>
+
+        <button type="button" class="tap-to-start" id="tapToStart" hidden>Tap to go live</button>
+
+        <footer class="chrome bottom-chrome">
+          <form id="promptForm" class="prompt-row" autocomplete="off">
+            <label class="sr-only" for="promptInput">Direct the stream</label>
+            <input
+              id="promptInput"
+              name="prompt"
+              type="text"
+              maxlength="280"
+              placeholder="Direct the shot — night falls, a storm rolls in, the sun returns…"
+            >
+            <button type="submit" id="sendBtn">Send</button>
+          </form>
+        </footer>
       </div>
-      <div class="grain" aria-hidden="true"></div>
-      <div class="vignette" aria-hidden="true"></div>
-      <div class="letterbox top"></div>
-      <div class="letterbox bottom"></div>
-      <button type="button" class="tap-to-start" id="tapToStart" hidden>Tap to go live</button>
     </div>
 
-    <header class="chrome top-chrome">
-      <div class="live-pill">
-        <span class="live-dot" id="liveDot"></span>
-        <span class="tracking-[0.22em] text-[10px] font-medium uppercase" id="liveLabel">Live</span>
+    <div class="dock" id="dock">
+      <div class="dock-row">
+        <label class="pick">
+          <span>Output</span>
+          <select id="formatSelect">
+            <option value="landscape">Landscape 16:9 · YouTube / Twitch</option>
+            <option value="portrait">Portrait 9:16 · TikTok LIVE / Reels</option>
+            <option value="square">Square 1:1 · Instagram</option>
+          </select>
+        </label>
+        <label class="pick">
+          <span>Size</span>
+          <select id="sizeSelect">
+            <option value="540">540p</option>
+            <option value="720" selected>720p</option>
+            <option value="1080">1080p</option>
+          </select>
+        </label>
+        <label class="pick">
+          <span>Provider</span>
+          <select id="providerSelect">
+            <option value="mock">Mock (ffmpeg)</option>
+            <option value="veo">Veo 3.1</option>
+            <option value="luma">Luma Ray 2</option>
+            <option value="runway">Runway Gen-4</option>
+            <option value="kling">Kling</option>
+            <option value="fal">fal.ai</option>
+          </select>
+        </label>
+        <span class="hint" id="queueHint"></span>
       </div>
-      <div class="status-line">
-        <span id="stateLabel">CONNECTING</span>
-        <span class="sep">·</span>
-        <span id="nowPlaying">—</span>
+      <div class="dock-row">
+        <button type="button" class="ghost" id="togglePanel" aria-pressed="false">Board</button>
+        <button type="button" class="ghost" id="toggleChat" aria-pressed="true">Chat</button>
+        <button type="button" class="ghost" id="toggleAudio" aria-pressed="false">Sound</button>
+        <button type="button" class="ghost" id="simToggle" aria-pressed="false">Simulate audience</button>
+        <button type="button" class="ghost gift-btn" id="sendGift" data-gift="Rose" data-value="1">🌹 Rose</button>
+        <button type="button" class="ghost gift-btn" id="sendGiftMid" data-gift="Galaxy" data-value="1000">🌌 Galaxy</button>
+        <button type="button" class="ghost gift-btn" id="sendGiftBig" data-gift="Lion" data-value="29999">🦁 Lion</button>
+        <button type="button" class="ghost" id="failOnce">Fail next</button>
       </div>
-      <div class="buffer-meter" title="Ready-ahead buffer">
-        <span class="buffer-label">buf</span>
-        <div class="buffer-track"><div class="buffer-fill" id="bufferFill"></div></div>
-        <span id="bufferLabel" class="tabular">0.0s</span>
-      </div>
-    </header>
-
-    <div class="compose-indicator" id="composeIndicator" hidden>
-      <span class="compose-bars" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span id="composeText">composing next beat</span>
     </div>
 
     <aside class="side-panel" id="sidePanel" hidden>
       <div class="panel-section">
         <h2>Engine</h2>
         <pre id="engineView"></pre>
+      </div>
+      <div class="panel-section">
+        <h2>Audience</h2>
+        <pre id="audienceView"></pre>
       </div>
       <div class="panel-section">
         <h2>World state</h2>
@@ -72,37 +151,6 @@
     </aside>
 
     <div class="toasts" id="toasts"></div>
-
-    <footer class="chrome bottom-chrome">
-      <form id="promptForm" class="prompt-row" autocomplete="off">
-        <label class="sr-only" for="promptInput">Direct the stream</label>
-        <input
-          id="promptInput"
-          name="prompt"
-          type="text"
-          maxlength="280"
-          placeholder="Direct the shot — night falls, a storm rolls in, the sun returns…"
-        >
-        <button type="submit" id="sendBtn">Send</button>
-      </form>
-      <div class="controls-row">
-        <button type="button" class="ghost" id="togglePanel" aria-pressed="false">Board</button>
-        <button type="button" class="ghost" id="toggleAudio" aria-pressed="false">Sound</button>
-        <button type="button" class="ghost" id="failOnce">Fail next</button>
-        <label class="provider-pick">
-          <span>Provider</span>
-          <select id="providerSelect">
-            <option value="mock">Mock (ffmpeg)</option>
-            <option value="veo">Veo 3.1</option>
-            <option value="luma">Luma Ray 2</option>
-            <option value="runway">Runway Gen-4</option>
-            <option value="kling">Kling</option>
-            <option value="fal">fal.ai</option>
-          </select>
-        </label>
-        <span class="hint" id="queueHint"></span>
-      </div>
-    </footer>
   </div>
   <script src="player.js"></script>
   <script src="demo.js"></script>

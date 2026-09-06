@@ -23,6 +23,8 @@ from collections import deque
 from pathlib import Path
 
 from . import media
+from .audience import AudienceEngine, AudienceEvent, Direction
+from .audience_sources import simulator, tiktok_live, twitch_irc, youtube_live_chat
 from .config import settings
 from .director import compose
 from .models import (
@@ -57,7 +59,11 @@ class Timeline:
         self.loop_rotate_i = 0
         self.pending: deque[tuple[Segment, FinishedClip, str | None]] = deque()
         self.jobs: list[GenerationJob] = []
-        self.queue: deque[str] = deque()
+        self.queue: deque[dict] = deque()  # {prompt, trigger, priority, user, meta}
+        self.session = 1
+        self.audience = AudienceEngine()
+        self._source_tasks: list[asyncio.Task] = []
+        self.simulate_audience = False
         self.events: deque[str] = deque(maxlen=120)
         self.limiter = RateLimiter()
         self.fail_next = False
@@ -72,6 +78,7 @@ class Timeline:
         self._loop_after_beat: dict[str, str] = {}
         self._last_published_norm: Path | None = None
         self._last_low_log = 0.0
+        self._restarting = False
 
     # ------------------------------------------------------------------ utils
     def log(self, msg: str) -> None:
@@ -108,17 +115,27 @@ class Timeline:
     def newest(self) -> Segment | None:
         return self.published[-1] if self.published else None
 
+    BEAT_TRIGGERS = ("user_prompt", "chat_vote", "gift")
+
     def _busy(self, trigger: str) -> bool:
-        return any(j.trigger == trigger and j.status in ("pending", "running") for j in self.jobs)
+        triggers = self.BEAT_TRIGGERS if trigger == "user_prompt" else (trigger,)
+        return any(j.trigger in triggers and j.status in ("pending", "running") for j in self.jobs)
 
     # --------------------------------------------------------------- startup
     async def bootstrap(self) -> None:
         """Build the initial idle loop from the plate, then go live."""
-        self.log("bootstrapping idle loop from plate")
+        self.log(f"bootstrapping idle loop from plate ({settings.format} {settings.width}x{settings.height})")
+        self.published.clear()
+        self.pending.clear()
+        self.loops.clear()
+        self.loop_order.clear()
+        self._loop_after_beat.clear()
+        self.seq = 0
+        self.active_loop = None
         plate = settings.plate_path
         if not plate.exists():
             raise RuntimeError(f"plate image missing: {plate}")
-        frame = settings.media_dir / "frames" / "plate.jpg"
+        frame = settings.media_dir / "frames" / f"plate_{settings.format}_{settings.size}.jpg"
         await media.fit_image(plate, frame)
         hold = await make_hold_loop(frame)
         self._register_loop(hold, source="hold", provider="local", title="idle · golden hour", look="golden")
@@ -129,6 +146,72 @@ class Timeline:
         self._ready.set()
         self.log("live")
         self._spawn(self._build_library(frame))
+        self._start_sources()
+
+    async def restart(self, fmt: str, size: str | None = None) -> None:
+        """Switch output format: new session, fresh loops, client re-attaches."""
+        if self._restarting:
+            return
+        self._restarting = True
+        try:
+            for t in list(self._inflight):
+                t.cancel()
+            self._inflight.clear()
+            settings.apply_format(fmt, size)
+            self.session += 1
+            self._ready.clear()
+            self.queue.clear()
+            self.broadcast({"type": "session", "session": self.session, "format": settings.format_info()})
+            await self.bootstrap()
+        finally:
+            self._restarting = False
+
+    # -------------------------------------------------------------- audience
+    def _start_sources(self) -> None:
+        if self._source_tasks:
+            return
+        if settings.twitch_channel:
+            self._source_tasks.append(asyncio.create_task(twitch_irc(settings.twitch_channel, self.ingest_audience)))
+            self.audience.sources["twitch"] = settings.twitch_channel
+        if settings.youtube_api_key and settings.youtube_video_id:
+            self._source_tasks.append(asyncio.create_task(youtube_live_chat(settings.youtube_api_key, settings.youtube_video_id, self.ingest_audience)))
+            self.audience.sources["youtube"] = settings.youtube_video_id
+        if settings.tiktok_unique_id:
+            self._source_tasks.append(asyncio.create_task(tiktok_live(settings.tiktok_unique_id, self.ingest_audience)))
+            self.audience.sources["tiktok"] = "@" + settings.tiktok_unique_id
+        self.audience.sources["webhook"] = "POST /api/audience/event"
+
+    def set_simulator(self, on: bool) -> None:
+        if on and not self.simulate_audience:
+            self.simulate_audience = True
+            self._sim_task = asyncio.create_task(simulator(self.ingest_audience))
+            self.audience.sources["simulator"] = "on"
+            self.log("audience simulator on")
+        elif not on and self.simulate_audience:
+            self.simulate_audience = False
+            self._sim_task.cancel()
+            self.audience.sources.pop("simulator", None)
+            self.log("audience simulator off")
+
+    def ingest_audience(self, ev: AudienceEvent) -> None:
+        direction = self.audience.ingest(ev)
+        self.broadcast({"type": "audience_event", "event": {
+            "platform": ev.platform, "type": ev.type, "user": ev.user, "text": ev.text,
+            "gift_name": ev.gift_name, "gift_value": ev.gift_value, "count": ev.count, "ts": ev.ts}})
+        if direction:
+            self._apply_direction(direction)
+
+    def _apply_direction(self, d: Direction) -> None:
+        if not moderate(d.prompt).ok:
+            return
+        item = {"prompt": d.prompt, "trigger": d.trigger, "priority": d.priority, "user": d.user, "meta": d.meta}
+        if d.priority == "interrupt":
+            self.queue.appendleft(item)
+        else:
+            self.queue.append(item)
+        self.log(f"{d.trigger} from {d.user}: {d.prompt[:60]}")
+        self.broadcast({"type": "queue", "queue": [q["prompt"] for q in self.queue]})
+        self.broadcast({"type": "direction", "direction": item})
 
     async def _build_library(self, frame: Path) -> None:
         """Ask the loop provider for a small library of real idle loops."""
@@ -254,7 +337,7 @@ class Timeline:
             self._publish_loop(self._next_idle_loop())
 
     # ------------------------------------------------------------------ jobs
-    def _begin_job(self, trigger: str, prompt: str, *, condition: Path | None = None) -> GenerationJob:
+    def _begin_job(self, trigger: str, prompt: str, *, condition: Path | None = None, user: str = "director", meta: dict | None = None) -> GenerationJob:
         job = GenerationJob(
             job_id=f"job_{uuid.uuid4().hex[:8]}",
             trigger=trigger,  # type: ignore[arg-type]
@@ -262,6 +345,8 @@ class Timeline:
             condition_frame=str(condition) if condition else None,
             provider=self.primary,
             status="running",
+            requested_by=user,
+            meta=meta or {},
         )
         self.jobs.insert(0, job)
         del self.jobs[40:]
@@ -298,9 +383,9 @@ class Timeline:
             return {"ok": False, "reason": "rate"}
         if provider and provider in provider_status():
             self.primary = provider
-        self.queue.append(prompt.strip())
+        self.queue.append({"prompt": prompt.strip(), "trigger": "user_prompt", "priority": "queue", "user": session, "meta": {}})
         self.log(f"queued: {prompt.strip()}")
-        self.broadcast({"type": "queue", "queue": list(self.queue)})
+        self.broadcast({"type": "queue", "queue": [q["prompt"] for q in self.queue]})
         return {"ok": True}
 
     def _anchor(self) -> tuple[Path, Path | None, dict | None, str | None]:
@@ -327,11 +412,12 @@ class Timeline:
                 return await get_provider(self.fallback).generate(req)
             raise
 
-    async def _run_prompt_job(self, prompt: str) -> None:
+    async def _run_prompt_job(self, item: dict) -> None:
+        prompt = item["prompt"]
         anchor, prior_clip, prior_ref, prior_provider = self._anchor()
-        job = self._begin_job("user_prompt", prompt, condition=anchor)
+        job = self._begin_job(item.get("trigger", "user_prompt"), prompt, condition=anchor, user=item.get("user", "director"), meta=item.get("meta"))
         try:
-            directed = await compose(self.world, prompt)
+            directed = await compose(self.world, prompt, audience=self.audience.director_context())
             job.director_prompt_final = directed.generation_prompt
             job.substituted = directed.substituted
             req = GenerationRequest(
@@ -353,7 +439,7 @@ class Timeline:
             tpl = Segment(
                 seq=0, segment_id="pending", source="generated",
                 prompt_used=directed.generation_prompt, duration_sec=fin.duration_sec, start_offset=0,
-                title=f"{prompt[:48]} · {directed.look}",
+                title=(f"🎁 {item.get('user')}: " if item.get("trigger") == "gift" else (f"chat: " if item.get("trigger") == "chat_vote" else "")) + f"{prompt[:44]} · {directed.look}",
                 url=f"/api/media/segments/{fin.frag_path.name}",
                 frame_url=f"/api/frames/{fin.last_frame.name}",
                 conditioning_frame=f"/api/frames/{anchor.name}",
@@ -373,7 +459,7 @@ class Timeline:
             self._fail_job(job, exc)
             if job.retries < 1 and not isinstance(exc, media.MediaError):
                 job.retries += 1
-                self.queue.appendleft(prompt)
+                self.queue.appendleft(item)
                 self.log("retrying prompt once")
             else:
                 self.broadcast({"type": "toast", "msg": "Generation missed. Holding the shot.", "kind": "warn"})
@@ -417,10 +503,13 @@ class Timeline:
             self._fail_job(job, exc)
 
     async def _pump(self) -> None:
+        vote = self.audience.tick()
+        if vote:
+            self._apply_direction(vote)
         if not self._busy("user_prompt") and self.queue:
-            prompt = self.queue.popleft()
-            self.broadcast({"type": "queue", "queue": list(self.queue)})
-            self._spawn(self._run_prompt_job(prompt))
+            item = self.queue.popleft()
+            self.broadcast({"type": "queue", "queue": [q["prompt"] for q in self.queue]})
+            self._spawn(self._run_prompt_job(item))
         # Promote a finished provider loop over the hold loop once its beat is live.
         for beat_id, loop_id in list(self._loop_after_beat.items()):
             hold_active = self.active_loop and self.loops[self.active_loop].source == "hold"
@@ -460,11 +549,14 @@ class Timeline:
             now_playing=live.title if live else "",
             world=self.world,
             jobs=self.jobs[:10],
-            queue=list(self.queue),
+            queue=[q["prompt"] for q in self.queue],
             active_loop=self.active_loop,
             providers=provider_status(),
             primary_provider=self.primary,
             events=list(self.events)[:14],
+            session=self.session,
+            format=settings.format_info(),
+            audience=self.audience.snapshot(),
         )
 
     def metrics(self) -> Metrics:
@@ -504,6 +596,9 @@ class Timeline:
         await self.bootstrap()
         while self._running:
             try:
+                if not self._ready.is_set():
+                    await asyncio.sleep(0.25)
+                    continue
                 self._fill()
                 await self._pump()
                 if self.buffer_ahead() < settings.low_buffer_sec and time.monotonic() - self._last_low_log > 5:
@@ -515,7 +610,7 @@ class Timeline:
 
     def stop(self) -> None:
         self._running = False
-        for t in self._inflight:
+        for t in list(self._inflight) + self._source_tasks:
             t.cancel()
 
     async def wait_ready(self) -> None:

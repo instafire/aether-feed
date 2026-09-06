@@ -46,7 +46,7 @@ class RunwayProvider(VideoProvider):
             "promptImage": frame_data_uri(req.condition_frame),
             "promptText": req.prompt[:1000],
             "duration": 10 if req.duration_sec > 7 else 5,
-            "ratio": "1280:720",
+            "ratio": {"landscape": "1280:720", "portrait": "720:1280", "square": "960:960"}.get(settings.format, "1280:720"),
         }
         async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(f"{BASE}/image_to_video", headers=self._headers(), json=payload)
