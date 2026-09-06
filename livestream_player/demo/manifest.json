@@ -1,0 +1,35 @@
+{
+  "fps": 24,
+  "width": 960,
+  "height": 540,
+  "duration_sec": 6.0,
+  "states": {
+    "golden": {
+      "loop": "loop_golden.mp4",
+      "anchor": "anchor_golden.jpg",
+      "title": "idle \u00b7 golden"
+    },
+    "night": {
+      "loop": "loop_night.mp4",
+      "anchor": "anchor_night.jpg",
+      "title": "idle \u00b7 night"
+    },
+    "storm": {
+      "loop": "loop_storm.mp4",
+      "anchor": "anchor_storm.jpg",
+      "title": "idle \u00b7 storm"
+    }
+  },
+  "transitions": {
+    "golden>golden": "t_golden_golden.mp4",
+    "golden>night": "t_golden_night.mp4",
+    "golden>storm": "t_golden_storm.mp4",
+    "night>golden": "t_night_golden.mp4",
+    "night>night": "t_night_night.mp4",
+    "night>storm": "t_night_storm.mp4",
+    "storm>golden": "t_storm_golden.mp4",
+    "storm>night": "t_storm_night.mp4",
+    "storm>storm": "t_storm_storm.mp4"
+  },
+  "codec": "video/mp4; codecs=\"avc1.4d4028\""
+}

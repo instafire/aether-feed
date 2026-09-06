@@ -8,3 +8,5 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+generative_livestream/media/
+generative_livestream/tests/_media/

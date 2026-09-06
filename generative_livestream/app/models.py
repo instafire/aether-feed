@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -27,8 +27,10 @@ class Character(BaseModel):
 
 
 class WorldState(BaseModel):
-    style_prefix: str = "cinematic, 35mm film grain, warm golden-hour color grade"
-    setting: str = "a floating market town above the clouds"
+    style_prefix: str = (
+        "cinematic, 35mm film grain, warm golden-hour color grade, locked wide shot"
+    )
+    setting: str = "a floating market town above the clouds, rope bridge to a lantern-lit market"
     characters: list[Character] = Field(
         default_factory=lambda: [
             Character(
@@ -37,46 +39,62 @@ class WorldState(BaseModel):
             )
         ]
     )
-    current_camera_state: str = "slow dolly-in, eye-level"
-    last_established_action: str = (
-        "the courier is descending a rope bridge toward a market stall"
-    )
+    current_camera_state: str = "locked wide, very slow push-in, never cuts"
+    last_established_action: str = "lanterns sway over the market walkway at golden hour"
     last_frame_description: str = (
-        "a fox-eared courier in a blue cloak walks a rope bridge toward "
-        "lantern-lit stalls over a sea of clouds at golden hour"
+        "wide shot of a floating wooden market above clouds, sun low left, rope bridge centre"
     )
     tone: str = "whimsical, adventurous"
+    look: str = "golden"
     updated_at: datetime = Field(default_factory=utcnow)
 
 
 class Segment(BaseModel):
+    """One published entry on the live timeline (spec §6)."""
+
+    seq: int
     segment_id: str
-    source: Literal["idle", "generated"]
+    source: Literal["idle", "hold", "generated"]
     prompt_used: str = ""
-    duration_sec: float = 6.4
+    duration_sec: float
+    start_offset: float
     title: str = ""
-    asset_url: str = ""
-    last_frame: str = ""
+    url: str
+    frame_url: str
     conditioning_frame: str | None = None
     model_provider: str = "mock"
-    status: Literal["pending", "ready", "failed"] = "ready"
+    native_extend: bool = False
     loop_candidate: bool = False
+    loop_id: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class LoopEntry(BaseModel):
+    loop_id: str
+    frag_path: str
+    norm_path: str
+    anchor_frame: str
+    duration_sec: float
+    title: str
+    source: Literal["idle", "hold"]
+    provider: str
+    look: str = "golden"
 
 
 class GenerationJob(BaseModel):
     job_id: str
-    trigger: Literal["user_prompt", "loop"]
+    trigger: Literal["user_prompt", "loop", "library"]
     user_prompt_raw: str
     director_prompt_final: str = ""
-    condition_on_segment: str | None = None
+    condition_frame: str | None = None
     priority: Literal["interrupt", "queue"] = "queue"
-    status: Literal["pending", "running", "complete", "failed"] = "pending"
+    status: Literal["pending", "running", "complete", "failed", "rejected"] = "pending"
     retries: int = 0
     provider: str = "mock"
     substituted: bool = False
     error: str | None = None
     latency_ms: int | None = None
+    cost_usd: float = 0.0
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -84,7 +102,7 @@ class DirectorResult(BaseModel):
     generation_prompt: str
     updated_world_state: WorldState
     substituted: bool = False
-    scene_id: str | None = None
+    look: str = "golden"
 
 
 class PromptRequest(BaseModel):
@@ -92,11 +110,30 @@ class PromptRequest(BaseModel):
     provider: str | None = None
 
 
+class Metrics(BaseModel):
+    buffer_ahead_sec: float
+    live_offset_sec: float
+    segments_published: int
+    jobs_total: int
+    jobs_failed: int
+    jobs_rejected: int
+    avg_latency_ms: dict[str, float]
+    success_rate: dict[str, float]
+    cost_usd_total: float
+    loops_in_library: int
+    viewers: int
+
+
 class EngineSnapshot(BaseModel):
     state: EngineState
     buffer_ahead_sec: float
+    live_offset_sec: float
+    live_seq: int
     now_playing: str
     world: WorldState
     jobs: list[GenerationJob]
     queue: list[str]
-    segments_ready: int
+    active_loop: str | None
+    providers: dict[str, Any]
+    primary_provider: str
+    events: list[str]

@@ -18,54 +18,24 @@ img, video, svg { max-width: 100%; height: auto; }
   background: #070605;
   overflow: hidden;
 }
-.camera {
-  position: absolute;
-  inset: -14%;
-  will-change: transform;
-  transform-origin: 52% 48%;
-}
-.plate {
+.feed-wrap {
   position: absolute;
   inset: 0;
-  background-image: url("assets/idle_market.jpg");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
 }
-.event-canvas,
-.wx-canvas {
+#feed, .feed-wrap video {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  object-fit: cover;
+  background: #070605;
+  filter: contrast(1.04) saturate(1.05);
 }
-.wx-canvas { z-index: 3; }
-.event-canvas { z-index: 2; }
-
-.grade {
-  position: absolute; inset: 0; pointer-events: none; z-index: 4;
-  mix-blend-mode: multiply;
-  opacity: 0;
-  background: #1a2438;
-}
-.fog {
-  position: absolute; inset: -10%; pointer-events: none; z-index: 4;
-  opacity: 0.12;
-  background:
-    radial-gradient(ellipse at 30% 80%, rgba(230,220,200,0.35), transparent 55%),
-    radial-gradient(ellipse at 70% 40%, rgba(200,210,220,0.18), transparent 50%);
-  animation: fogdrift 28s ease-in-out infinite alternate;
-}
-@keyframes fogdrift {
-  from { transform: translate3d(-2%, 1%, 0) scale(1.02); }
-  to   { transform: translate3d(3%, -1%, 0) scale(1.08); }
-}
-.bloom {
-  position: absolute; inset: 0; pointer-events: none; z-index: 4;
-  opacity: 0.22;
-  background: radial-gradient(ellipse at 18% 28%, rgba(255,196,110,0.35), transparent 42%);
-  mix-blend-mode: screen;
+.tap-to-start {
+  position: absolute; z-index: 7; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: rgba(8,6,4,0.7); color: #f3eadc; border: 1px solid rgba(231,221,208,0.5);
+  padding: 0.8rem 1.4rem; font: 600 12px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer;
 }
 
 .grain {
@@ -235,6 +205,8 @@ img, video, svg { max-width: 100%; height: auto; }
   padding: 0.4rem 0; font-size: 11px; color: #d9cbb8;
 }
 .job-list .st { color: #d4a017; text-transform: uppercase; letter-spacing: 0.1em; font-size: 9px; }
+.job-list .err { color: #c2705f; font-size: 10px; word-break: break-word; }
+#engineView { margin: 0; white-space: pre-wrap; font-size: 11px; line-height: 1.45; color: #d9cbb8; }
 
 .toasts {
   position: absolute; z-index: 10; left: 1rem; bottom: calc(7% + 7.2rem);

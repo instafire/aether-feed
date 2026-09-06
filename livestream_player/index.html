@@ -20,34 +20,30 @@
 <body class="min-h-dvh text-sm antialiased bg-black text-stone-200">
   <div id="app" class="relative min-h-dvh w-full overflow-hidden">
     <div class="stage" id="stage" aria-label="Live generative feed">
-      <div class="camera" id="camera">
-        <div class="plate" id="plate"></div>
-        <canvas id="eventCanvas" class="event-canvas"></canvas>
+      <div class="feed-wrap" id="feedWrap">
+        <video id="feed" muted autoplay playsinline preload="auto" poster="assets/idle_market.jpg"></video>
       </div>
-      <div class="grade" id="grade" aria-hidden="true"></div>
-      <canvas id="wxCanvas" class="wx-canvas" aria-hidden="true"></canvas>
-      <div class="fog" id="fog" aria-hidden="true"></div>
-      <div class="bloom" id="bloom" aria-hidden="true"></div>
       <div class="grain" aria-hidden="true"></div>
       <div class="vignette" aria-hidden="true"></div>
       <div class="letterbox top"></div>
       <div class="letterbox bottom"></div>
+      <button type="button" class="tap-to-start" id="tapToStart" hidden>Tap to go live</button>
     </div>
 
     <header class="chrome top-chrome">
       <div class="live-pill">
         <span class="live-dot" id="liveDot"></span>
-        <span class="tracking-[0.22em] text-[10px] font-medium uppercase">Live</span>
+        <span class="tracking-[0.22em] text-[10px] font-medium uppercase" id="liveLabel">Live</span>
       </div>
       <div class="status-line">
-        <span id="stateLabel">IDLE_LOOP</span>
+        <span id="stateLabel">CONNECTING</span>
         <span class="sep">·</span>
-        <span id="nowPlaying">locked camera · golden hour</span>
+        <span id="nowPlaying">—</span>
       </div>
       <div class="buffer-meter" title="Ready-ahead buffer">
         <span class="buffer-label">buf</span>
         <div class="buffer-track"><div class="buffer-fill" id="bufferFill"></div></div>
-        <span id="bufferLabel" class="tabular">20.0s</span>
+        <span id="bufferLabel" class="tabular">0.0s</span>
       </div>
     </header>
 
@@ -57,6 +53,10 @@
     </div>
 
     <aside class="side-panel" id="sidePanel" hidden>
+      <div class="panel-section">
+        <h2>Engine</h2>
+        <pre id="engineView"></pre>
+      </div>
       <div class="panel-section">
         <h2>World state</h2>
         <pre id="worldStateView"></pre>
@@ -81,7 +81,7 @@
           name="prompt"
           type="text"
           maxlength="280"
-          placeholder="Direct the same shot — night falls, a storm, a dragon…"
+          placeholder="Direct the shot — night falls, a storm rolls in, the sun returns…"
         >
         <button type="submit" id="sendBtn">Send</button>
       </form>
@@ -92,18 +92,20 @@
         <label class="provider-pick">
           <span>Provider</span>
           <select id="providerSelect">
-            <option value="mock">Mock (locked camera)</option>
+            <option value="mock">Mock (ffmpeg)</option>
             <option value="veo">Veo 3.1</option>
-            <option value="luma">Luma Ray2</option>
+            <option value="luma">Luma Ray 2</option>
             <option value="runway">Runway Gen-4</option>
             <option value="kling">Kling</option>
+            <option value="fal">fal.ai</option>
           </select>
         </label>
         <span class="hint" id="queueHint"></span>
       </div>
     </footer>
   </div>
-  <script src="engine.js"></script>
+  <script src="player.js"></script>
+  <script src="demo.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
