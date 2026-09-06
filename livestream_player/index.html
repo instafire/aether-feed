@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aether Feed — generative livestream</title>
+  <script
+    src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.0/dist/index.global.js"
+    integrity="sha384-nWTzRTCY/9V4Bo352ehygr1c4cnst4XN6lMR3fipakEQrhVpc0hEM5Dii3Amz0sT"
+    crossorigin="anonymous"
+  ></script>
+  <style type="text/tailwindcss">
+    @custom-variant dark (&:where(.dark, .dark *));
+  </style>
+  <script>
+    document.documentElement.classList.add('dark');
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="min-h-dvh text-sm antialiased bg-black text-stone-200">
+  <div id="app" class="relative min-h-dvh w-full overflow-hidden">
+    <div class="stage" id="stage" aria-label="Live generative feed">
+      <div class="camera" id="camera">
+        <div class="plate" id="plate"></div>
+        <canvas id="eventCanvas" class="event-canvas"></canvas>
+      </div>
+      <div class="grade" id="grade" aria-hidden="true"></div>
+      <canvas id="wxCanvas" class="wx-canvas" aria-hidden="true"></canvas>
+      <div class="fog" id="fog" aria-hidden="true"></div>
+      <div class="bloom" id="bloom" aria-hidden="true"></div>
+      <div class="grain" aria-hidden="true"></div>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="letterbox top"></div>
+      <div class="letterbox bottom"></div>
+    </div>
+
+    <header class="chrome top-chrome">
+      <div class="live-pill">
+        <span class="live-dot" id="liveDot"></span>
+        <span class="tracking-[0.22em] text-[10px] font-medium uppercase">Live</span>
+      </div>
+      <div class="status-line">
+        <span id="stateLabel">IDLE_LOOP</span>
+        <span class="sep">·</span>
+        <span id="nowPlaying">locked camera · golden hour</span>
+      </div>
+      <div class="buffer-meter" title="Ready-ahead buffer">
+        <span class="buffer-label">buf</span>
+        <div class="buffer-track"><div class="buffer-fill" id="bufferFill"></div></div>
+        <span id="bufferLabel" class="tabular">20.0s</span>
+      </div>
+    </header>
+
+    <div class="compose-indicator" id="composeIndicator" hidden>
+      <span class="compose-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span id="composeText">composing next beat</span>
+    </div>
+
+    <aside class="side-panel" id="sidePanel" hidden>
+      <div class="panel-section">
+        <h2>World state</h2>
+        <pre id="worldStateView"></pre>
+      </div>
+      <div class="panel-section">
+        <h2>Jobs</h2>
+        <ul id="jobList" class="job-list"></ul>
+      </div>
+      <div class="panel-section">
+        <h2>Log</h2>
+        <ul id="eventLog" class="event-log"></ul>
+      </div>
+    </aside>
+
+    <div class="toasts" id="toasts"></div>
+
+    <footer class="chrome bottom-chrome">
+      <form id="promptForm" class="prompt-row" autocomplete="off">
+        <label class="sr-only" for="promptInput">Direct the stream</label>
+        <input
+          id="promptInput"
+          name="prompt"
+          type="text"
+          maxlength="280"
+          placeholder="Direct the same shot — night falls, a storm, a dragon…"
+        >
+        <button type="submit" id="sendBtn">Send</button>
+      </form>
+      <div class="controls-row">
+        <button type="button" class="ghost" id="togglePanel" aria-pressed="false">Board</button>
+        <button type="button" class="ghost" id="toggleAudio" aria-pressed="false">Sound</button>
+        <button type="button" class="ghost" id="failOnce">Fail next</button>
+        <label class="provider-pick">
+          <span>Provider</span>
+          <select id="providerSelect">
+            <option value="mock">Mock (locked camera)</option>
+            <option value="veo">Veo 3.1</option>
+            <option value="luma">Luma Ray2</option>
+            <option value="runway">Runway Gen-4</option>
+            <option value="kling">Kling</option>
+          </select>
+        </label>
+        <span class="hint" id="queueHint"></span>
+      </div>
+    </footer>
+  </div>
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
