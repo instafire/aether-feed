@@ -1,0 +1,35 @@
+{
+  "fps": 24,
+  "width": 960,
+  "height": 540,
+  "duration_sec": 6.0,
+  "states": {
+    "golden": {
+      "loop": "loop_golden.webm",
+      "anchor": "anchor_golden.jpg",
+      "title": "idle \u00b7 golden"
+    },
+    "night": {
+      "loop": "loop_night.webm",
+      "anchor": "anchor_night.jpg",
+      "title": "idle \u00b7 night"
+    },
+    "storm": {
+      "loop": "loop_storm.webm",
+      "anchor": "anchor_storm.jpg",
+      "title": "idle \u00b7 storm"
+    }
+  },
+  "transitions": {
+    "golden>golden": "t_golden_golden.webm",
+    "golden>night": "t_golden_night.webm",
+    "golden>storm": "t_golden_storm.webm",
+    "night>golden": "t_night_golden.webm",
+    "night>night": "t_night_night.webm",
+    "night>storm": "t_night_storm.webm",
+    "storm>golden": "t_storm_golden.webm",
+    "storm>night": "t_storm_night.webm",
+    "storm>storm": "t_storm_storm.webm"
+  },
+  "codec": "video/webm; codecs=\"vp9\""
+}

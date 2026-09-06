@@ -190,10 +190,26 @@ document.addEventListener("DOMContentLoaded", function () {
     liveLabel.textContent = "Demo";
     providerSelect.value = "mock";
     providerSelect.disabled = true;
-    fetch("demo/manifest.json")
-      .then(function (r) { if (!r.ok) throw new Error("no demo manifest"); return r.json(); })
+    // Local demo folder first; hosted builds that can't ship .mp4 stream the
+    // same clips from the repo.
+    // Two encodes of the same graph: H.264 fMP4 (default) and VP9 WebM for
+    // browsers without an H.264 decoder.
+    var MS = window.MediaSource || window.ManagedMediaSource;
+    var h264ok = !MS || MS.isTypeSupported('video/mp4; codecs="avc1.4d4028"');
+    var dir = h264ok ? "demo/" : "demo_vp9/";
+    var REMOTE_DEMO = "https://raw.githubusercontent.com/instafire/aether-feed/main/livestream_player/" + dir;
+    var base = dir;
+    fetch(dir + "manifest.json")
+      .then(function (r) { if (!r.ok) throw new Error("no local demo"); return r.json(); })
+      .catch(function () {
+        base = REMOTE_DEMO;
+        return fetch(REMOTE_DEMO + "manifest.json").then(function (r) {
+          if (!r.ok) throw new Error("no demo manifest");
+          return r.json();
+        });
+      })
       .then(function (manifest) {
-        demo = new DemoTimeline(ensurePlayer(manifest.codec), manifest, "demo/", { toast: toast });
+        demo = new DemoTimeline(ensurePlayer(manifest.codec), manifest, base, { toast: toast });
         demo.tick();
         tryPlay();
         setInterval(function () { demo.tick(); renderState(demo.snapshot()); }, 500);
